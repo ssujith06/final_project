@@ -1,0 +1,6 @@
+streamlit
+streamlit-chat
+sqlalchemy
+pandas
+numpy
+python-dotenv
