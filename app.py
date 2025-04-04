@@ -1,69 +1,57 @@
-import streamlit as st
-from auth import authenticate_user, register_user, check_authenticated
-import database
+import sqlite3
+import hashlib
+import secrets
+from datetime import datetime
 
-# Initialize database
-database.initialize_database()
+def init_db():
+    """Initialize the database with tables and sample data"""
+    conn = sqlite3.connect('hostel.db')
+    cursor = conn.cursor()
+    
+    # Create tables
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users
+                   (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   username TEXT UNIQUE NOT NULL,
+                   password TEXT NOT NULL,
+                   email TEXT UNIQUE NOT NULL,
+                   room_number TEXT,
+                   phone TEXT,
+                   registered_on TEXT)''')
+    
+    cursor.execute('''CREATE TABLE IF NOT EXISTS outpasses
+                   (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   user_id INTEGER,
+                   reason TEXT,
+                   departure_date TEXT,
+                   return_date TEXT,
+                   status TEXT DEFAULT 'pending',
+                   FOREIGN KEY(user_id) REFERENCES users(id))''')
+    
+    # Insert sample data if empty
+    if not cursor.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+        sample_users = [
+            ('admin', hash_password('admin123'), 'admin@hostel.com', 'A101', '9876543210'),
+            ('student1', hash_password('student123'), 'student1@hostel.com', 'B202', '8765432109'),
+            ('student2', hash_password('student123'), 'student2@hostel.com', 'C303', '7654321098')
+        ]
+        
+        for user in sample_users:
+            cursor.execute('''INSERT INTO users 
+                           (username, password, email, room_number, phone, registered_on)
+                           VALUES (?, ?, ?, ?, ?, ?)''',
+                           (*user, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    
+    conn.commit()
+    conn.close()
 
-# Page config
-st.set_page_config(page_title="Hostel Management System", layout="wide")
+def hash_password(password):
+    """Securely hash password with salt"""
+    salt = secrets.token_hex(16)
+    return f"{salt}${hashlib.sha256((salt + password).encode()).hexdigest()}"
 
-# Login/Register UI
-def auth_page():
-    st.title("🏠 Hostel Management System")
-    
-    tab1, tab2 = st.tabs(["Login", "Register"])
-    
-    with tab1:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login")
-            
-            if submit:
-                user = authenticate_user(username, password)
-                if user:
-                    st.session_state.authenticated = True
-                    st.session_state.user_id = user[0]
-                    st.session_state.username = user[1]
-                    st.experimental_rerun()
-                else:
-                    st.error("Invalid username or password")
-    
-    with tab2:
-        with st.form("register_form"):
-            username = st.text_input("Username")
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            room_number = st.text_input("Room Number")
-            phone = st.text_input("Phone Number")
-            submit = st.form_submeit_button("Register")
-            
-            if submit:
-                if password != confirm_password:
-                    st.error("Passwords don't match!")
-                elif register_user(username, password, email, room_number, phone):
-                    st.success("Registration successful! Please login.")
-
-# Main app flow
-if not check_authenticated():
-    auth_page()
-else:
-    # Show the main app after login
-    st.sidebar.title(f"Welcome, {st.session_state.username}!")
-    
-    if st.sidebar.button("Logout"):
-        st.session_state.authenticated = False
-        st.session_state.username = None
-        st.experimental_rerun()
-    
-    # Navigation
-    page = st.sidebar.radio("Menu", ["Dashboard", "Apply Outpass", "Mental Health Chatbot"])
-    
-    if page == "Dashboard":
-        import pages.dashboard
-    elif page == "Apply Outpass":
-        import pages.outpass
-    elif page == "Mental Health Chatbot":
-        import pages.chatbot
+def verify_password(plain_password, hashed_password):
+    """Verify password against stored hash"""
+    if not hashed_password or '$' not in hashed_password:
+        return False
+    salt, stored_hash = hashed_password.split('$')
+    return hashlib.sha256((salt + plain_password).encode()).hexdigest() == stored_hash
