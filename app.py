@@ -3,7 +3,7 @@ from auth import authenticate_user, register_user, check_authenticated
 import database
 
 # Initialize database
-database.init_db()
+database.initialize_database()
 
 # Page config
 st.set_page_config(page_title="Hostel Management System", layout="wide")
