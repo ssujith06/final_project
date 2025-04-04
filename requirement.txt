@@ -4,3 +4,5 @@ sqlalchemy
 pandas
 numpy
 python-dotenv
+streamlit>=1.22.0
+bcrypt>=4.0.1
